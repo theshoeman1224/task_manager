@@ -56,10 +56,26 @@ about 0.07 s for the integration tests.
 
 Final baseline after all characterization + fixture work landed:
 
-- `cargo test`: 49 passed (35 lib unit tests, 5 monitors structural, 9 platform fixtures)
-- `cargo test --features gui`: 49 passed, plus 4 UI characterization tests (graph_value,
+- `cargo test`: 50 passed (35 lib unit tests, 5 monitors structural, 10 platform fixtures,
+  including the powercap symlink-cycle regression test `powercap_symlink_cycle_terminates`)
+- `cargo test --features gui`: 50 passed, plus 4 UI characterization tests (graph_value,
   graph_max floors, scale_text per-unit formats) under `src/ui/mod.rs`'s inline module
 - `cargo clippy --all-features --all-targets`: same 6 warnings / 4 distinct lints as the
   tagged commit, no new warnings introduced
 - The `graph_points` outputs are pinned by both the structural tests and the GPU inline
   tests, so its later removal stays a reviewed, explicit change.
+
+Verification record for the powercap-fix regression fixture (symlinks `device -> .`,
+`subsystem -> .`, `subsystem-dev -> device` inside a zone dir, committed under
+`tests/fixtures/sys-cycles/class/powercap`):
+
+- Standalone binary running the tagged commit's walker against this fixture: hangs
+  (killed by timeout, exit 124). Against the live `/sys/class/powercap` as an
+  unprivileged user: still burning CPU after 90 s (killed); no counter output produced
+  before the kill.
+- Standalone binary running the fixed walker: the fixture completes in <0.1 s and
+  reports exactly one counter (the real zone, energy 777777777); the live
+  `/sys/class/powercap` completes instantly with the same final output (zero counters,
+  because `energy_uj` is unreadable for unprivileged users) that the old walk only
+  reached after exhausting the ELOOP ceiling, had it gotten that far. Output-equal,
+  runtime bounded.

@@ -77,6 +77,25 @@ fn powercap_missing_root_is_empty_not_error() {
 }
 
 #[test]
+fn powercap_symlink_cycle_terminates() {
+    // Regression test for the runaway walk found by the structural monitor
+    // tests (BASELINE.md, "Bug found while writing the baseline"). Real
+    // sysfs exposes `device` and `subsystem` symlinks inside zone dirs that
+    // loop back into the zone tree. Before the fix, the walker recursed
+    // through those links and blew up (strace showed thousands of `statx`
+    // calls over growing paths ending in ELOOP, effectively a hang; the GUI
+    // runs this walk every tick). This fixture reproduces the loop shape as
+    // committed symlinks. The walker must terminate promptly, skip the
+    // symlinks entirely, and report only the real zone once.
+    let counters = read_powercap_energy_counters(&fixture("sys-cycles/class/powercap"))
+        .expect("fixture root reads");
+    assert_eq!(counters.len(), 1, "symlinked back-references must not create counters or recursion");
+    assert_eq!(counters[0].name, ".cycle-zone");
+    assert_eq!(counters[0].energy_uj, 777777777);
+    assert!(counters[0].path.ends_with("zoneA"));
+}
+
+#[test]
 fn amd_drm_fixture_reads_direct_and_hwmon_files() {
     let gpus = read_amd_gpus(&fixture("sys/class/drm")).expect("fixture reads");
     assert_eq!(
