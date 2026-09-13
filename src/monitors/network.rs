@@ -102,19 +102,21 @@ mod tests {
     use super::choose_interface;
     use crate::platform::linux::NetworkCounters;
 
+    // Characterization tests: pin interface selection ahead of the refactor.
+
+    fn counter(interface: &str, rx: u64, tx: u64) -> NetworkCounters {
+        NetworkCounters {
+            interface: interface.to_string(),
+            rx_bytes: rx,
+            tx_bytes: tx,
+        }
+    }
+
     #[test]
     fn prefers_selected_interface() {
         let counters = vec![
-            NetworkCounters {
-                interface: "eth0".to_string(),
-                rx_bytes: 10,
-                tx_bytes: 10,
-            },
-            NetworkCounters {
-                interface: "wlan0".to_string(),
-                rx_bytes: 1,
-                tx_bytes: 1,
-            },
+            counter("eth0", 10, 10),
+            counter("wlan0", 1, 1),
         ];
 
         assert_eq!(
@@ -123,5 +125,61 @@ mod tests {
                 .interface,
             "wlan0"
         );
+    }
+
+    #[test]
+    fn selected_interface_missing_returns_none() {
+        // An explicit selection that isn't present yields None; no fallback
+        // to the busiest interface happens.
+        let counters = vec![counter("eth0", 10, 10)];
+        assert!(choose_interface(&counters, Some("ppp0")).is_none());
+    }
+
+    #[test]
+    fn skips_loopback_for_auto_selection() {
+        let counters = vec![
+            counter("lo", 1000, 1000),
+            counter("eth0", 10, 20),
+        ];
+        let chosen = choose_interface(&counters, None).unwrap();
+        assert_eq!(chosen.interface, "eth0");
+    }
+
+    #[test]
+    fn picks_busiest_interface_by_rx_plus_tx() {
+        let counters = vec![
+            counter("eth0", 10, 10),
+            counter("wlan0", 1, 100),
+        ];
+        let chosen = choose_interface(&counters, None).unwrap();
+        assert_eq!(chosen.interface, "wlan0");
+    }
+
+    #[test]
+    fn all_loopback_is_still_returned_as_fallback() {
+        // "lo" is filtered for auto-selection, but counters.first() catches
+        // the only-interfaces-are-lo case instead of returning None.
+        let counters = vec![counter("lo", 1000, 1000)];
+        let chosen = choose_interface(&counters, None).unwrap();
+        assert_eq!(chosen.interface, "lo");
+    }
+
+    #[test]
+    fn empty_counters_have_no_selection() {
+        let counters: Vec<NetworkCounters> = Vec::new();
+        assert!(choose_interface(&counters, None).is_none());
+        assert!(choose_interface(&counters, Some("eth0")).is_none());
+    }
+
+    #[test]
+    fn tie_keeps_first_max() {
+        // max_by_key keeps the last maximal element on ties; both counters
+        // tie, so wlan0 (later in the vec) is picked over eth0.
+        let counters = vec![
+            counter("eth0", 100, 100),
+            counter("wlan0", 100, 100),
+        ];
+        let chosen = choose_interface(&counters, None).unwrap();
+        assert_eq!(chosen.interface, "wlan0");
     }
 }

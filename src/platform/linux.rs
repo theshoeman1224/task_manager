@@ -91,33 +91,54 @@ fn collect_powercap_energy_counters(
     root: &Path,
     counters: &mut Vec<EnergyCounter>,
 ) -> io::Result<()> {
-    if !root.exists() {
+    // Sysfs class entries are symlinks and, once followed, expose symlinked
+    // back-references (`device`, `subsystem`, ...) that form cycles. Walking
+    // without resolving them means unbounded recursion (observed as a
+    // multi-second runaway that eventually dies on ELOOP). Canonicalize the
+    // root once and then only descend into real directories, never symlink
+    // entries. On real systems every energy zone is a real directory below
+    // the canonicalized root, so the set of counters reported is unchanged.
+    let Ok(real_root) = root.canonicalize() else {
         return Ok(());
-    }
+    };
 
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
+    let mut stack = vec![real_root];
+    while let Some(dir) = stack.pop() {
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
 
-        let energy_path = path.join("energy_uj");
-        if energy_path.exists() {
-            if let Ok(energy_uj) = read_u64(&energy_path) {
-                let name = fs::read_to_string(path.join("name"))
-                    .unwrap_or_else(|_| "powercap".to_string())
-                    .trim()
-                    .to_string();
-                counters.push(EnergyCounter {
-                    path: path.clone(),
-                    name,
-                    energy_uj,
-                });
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(_) => continue,
+            };
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if !file_type.is_dir() {
+                continue;
             }
-        }
 
-        collect_powercap_energy_counters(&path, counters)?;
+            let path = entry.path();
+            let energy_path = path.join("energy_uj");
+            if energy_path.exists() {
+                if let Ok(energy_uj) = read_u64(&energy_path) {
+                    let name = fs::read_to_string(path.join("name"))
+                        .unwrap_or_else(|_| "powercap".to_string())
+                        .trim()
+                        .to_string();
+                    counters.push(EnergyCounter {
+                        path: path.clone(),
+                        name,
+                        energy_uj,
+                    });
+                }
+            }
+
+            stack.push(path);
+        }
     }
 
     Ok(())
@@ -433,6 +454,9 @@ unsafe fn load_symbol<T: Copy>(handle: *mut c_void, name: &[u8]) -> io::Result<T
 mod tests {
     use super::*;
 
+    // Characterization tests: pin parser/Math behavior ahead of the
+    // platform/linux.rs split. See BASELINE.md.
+
     #[test]
     fn parses_proc_stat_cpu() {
         let times = parse_proc_stat_cpu("cpu  100 0 50 850 10 0 0 0 0 0").unwrap();
@@ -454,6 +478,60 @@ mod tests {
     }
 
     #[test]
+    fn rejects_per_core_stat_lines() {
+        // Only "cpu" aggregate lines parse; "cpu0 ..." returns None.
+        assert!(parse_proc_stat_cpu("cpu0 100 0 50 850 10 0 0 0 0 0").is_none());
+        assert!(parse_proc_stat_cpu("garbage 1 2 3 4").is_none());
+    }
+
+    #[test]
+    fn rejects_stat_lines_with_fewer_than_four_fields() {
+        assert!(parse_proc_stat_cpu("cpu 1 2 3").is_none());
+        // Four fields is the minimum.
+        assert!(parse_proc_stat_cpu("cpu 1 2 3 4").is_some());
+    }
+
+    #[test]
+    fn ignores_non_numeric_extra_fields() {
+        // Non-numeric fields are filtered out positionally, shifting the
+        // remaining values left. 10 0 0 90 0 0 -> values.len() == 6,
+        // idle = values[3] + values[4] = 90, total = 100.
+        let times = parse_proc_stat_cpu("cpu 10 0 0 90 x y 0 0").unwrap();
+        assert_eq!(times.idle, 90);
+        assert_eq!(times.total, 100);
+    }
+
+    #[test]
+    fn usage_is_none_when_no_time_elapses() {
+        let previous = CpuTimes { idle: 80, total: 100 };
+        let current = CpuTimes { idle: 80, total: 100 };
+        assert_eq!(cpu_usage_percent(previous, current), None);
+    }
+
+    #[test]
+    fn usage_is_none_when_total_counter_goes_backwards() {
+        // checked_sub on total_delta: backwards counters yield None, not panic.
+        let previous = CpuTimes { idle: 80, total: 100 };
+        let current = CpuTimes { idle: 90, total: 50 };
+        assert_eq!(cpu_usage_percent(previous, current), None);
+    }
+
+    #[test]
+    fn usage_clamps_idle_backslide_to_100_percent() {
+        // saturating_sub on idle_delta: idle counter resets clamp busy to 100%.
+        let previous = CpuTimes { idle: 90, total: 100 };
+        let current = CpuTimes { idle: 0, total: 200 };
+        assert_eq!(cpu_usage_percent(previous, current), Some(100.0));
+    }
+
+    #[test]
+    fn idle_only_delta_reports_zero_usage() {
+        let previous = CpuTimes { idle: 80, total: 100 };
+        let current = CpuTimes { idle: 180, total: 200 };
+        assert_eq!(cpu_usage_percent(previous, current), Some(0.0));
+    }
+
+    #[test]
     fn parses_proc_net_dev() {
         let contents = "\
 Inter-|   Receive                                                |  Transmit
@@ -466,5 +544,54 @@ Inter-|   Receive                                                |  Transmit
         assert_eq!(parsed[1].interface, "eth0");
         assert_eq!(parsed[1].rx_bytes, 4096);
         assert_eq!(parsed[1].tx_bytes, 8192);
+    }
+
+    #[test]
+    fn net_dev_skips_malformed_lines() {
+        // Lines without a colon are dropped entirely. But non-numeric counter
+        // fields are only filtered positionally, not by rejecting the line:
+        // "1 2 not-a-number 4..." parses the remaining 9 values as if the
+        // gap never existed (rx=1, tx=values[8]=10). Same for short rows
+        // with fewer than 9 numeric values being silently dropped.
+        let contents = "\
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+bad line without colon
+eth floppy: 1 2 not-a-number 4 5 6 7 8 9 10
+  eth0: 4096 4 0 0 0 0 0 0 8192 8 0 0 0 0 0 0
+";
+        let parsed = parse_proc_net_dev(contents);
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].interface, "eth floppy");
+        assert_eq!(parsed[0].rx_bytes, 1);
+        assert_eq!(parsed[0].tx_bytes, 10);
+        assert_eq!(parsed[1].interface, "eth0");
+    }
+
+    #[test]
+    fn net_dev_trims_interface_whitespace() {
+        let contents = "\
+header one
+header two
+     eth0    : 1 2 3 4 5 6 7 8 9
+";
+        let parsed = parse_proc_net_dev(contents);
+        assert_eq!(parsed[0].interface, "eth0");
+    }
+
+    #[test]
+    fn net_dev_counts_exactly_sixteen_fields() {
+        // A 16-field row parses; the 18-field `lo`-style row also parses but
+        // bytes are read positionally (0 and 8).
+        let contents = "\
+header one
+header two
+eth0: 10 1 0 0 0 0 0 0 100 2 0 0 0 0 0 0
+eth1: 20 1 0 0 0 0 0 0 0 1 0 0 0 0 0 0
+";
+        let parsed = parse_proc_net_dev(contents);
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].tx_bytes, 100);
+        assert_eq!(parsed[1].tx_bytes, 0);
     }
 }

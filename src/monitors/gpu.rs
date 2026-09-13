@@ -142,3 +142,64 @@ fn nvidia_snapshot(gpu: &NvidiaGpuInfo) -> MetricSnapshot {
     ));
     snapshot
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Characterization tests: pin GPU snapshot layout ahead of the
+    // deduplication of the NVIDIA/AMD/unavailable branches.
+
+    fn info(
+        utilization: impl Into<Option<f64>>,
+        power: impl Into<Option<f64>>,
+        temperature: impl Into<Option<f64>>,
+    ) -> NvidiaGpuInfo {
+        NvidiaGpuInfo {
+            index: 2,
+            utilization_percent: utilization.into(),
+            power_watts: power.into(),
+            temperature_celsius: temperature.into(),
+        }
+    }
+
+    #[test]
+    fn nvidia_snapshot_layout() {
+        let snapshot = nvidia_snapshot(&info(42.0, 112.345, 61.4));
+        assert_eq!(snapshot.title, "GPU");
+        assert_eq!(snapshot.subtitle, Some("NVIDIA GPU 2".to_string()));
+        let names: Vec<&str> = snapshot.metrics.iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(names, vec!["Usage", "GPU power", "Temperature"]);
+        assert_eq!(snapshot.metrics[0].value, MetricValue::Percent(42.0));
+        assert_eq!(snapshot.metrics[1].value, MetricValue::Watts(112.345));
+        assert_eq!(
+            snapshot.metrics[2].value,
+            MetricValue::Text("61.4 C".to_string())
+        );
+        assert_eq!(snapshot.graph_points, vec![("Usage".to_string(), 42.0)]);
+    }
+
+    #[test]
+    fn nvidia_snapshot_partially_unavailable() {
+        let snapshot = nvidia_snapshot(&info(None, Some(80.0), None));
+        assert_eq!(snapshot.metrics[0].value, MetricValue::Unavailable);
+        assert_eq!(snapshot.metrics[1].value, MetricValue::Watts(80.0));
+        assert_eq!(snapshot.metrics[2].value, MetricValue::Unavailable);
+        assert_eq!(snapshot.graph_points, vec![("Usage".to_string(), 0.0)]);
+    }
+
+    #[test]
+    fn graph_utilization_clamps_above_100() {
+        let snapshot = nvidia_snapshot(&info(150.0, None, None));
+        assert_eq!(snapshot.graph_points, vec![("Usage".to_string(), 100.0)]);
+    }
+
+    #[test]
+    fn temperature_format_is_one_decimal_celsius() {
+        let snapshot = nvidia_snapshot(&info(None, None, Some(9.25)));
+        assert_eq!(
+            snapshot.metrics[2].value,
+            MetricValue::Text("9.2 C".to_string())
+        );
+    }
+}
