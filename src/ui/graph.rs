@@ -1,6 +1,6 @@
 // Graph rendering for metric rows: pure value/scale mapping plus the cairo
 // draw function. Kept free of GTK widget construction so the mapping rules
-// have characterization tests (BASELINE.md).
+// have characterization tests (docs/baseline-history.md (formerly BASELINE.md)).
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -90,7 +90,7 @@ mod tests {
 
     // Characterization tests: pin the UI-side value/scale mapping used by
     // MetricRow before the ui split. Pure functions only; no GTK state
-    // needed. See BASELINE.md.
+    // needed. See docs/baseline-history.md (formerly BASELINE.md).
 
     #[test]
     fn graph_value_maps_only_finite_plot_units() {

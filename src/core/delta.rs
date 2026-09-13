@@ -63,7 +63,7 @@ mod tests {
     use std::time::Duration;
 
     // Characterization tests: pin the tracker semantics the two monitors
-    // relied on. See BASELINE.md. Network treats First and Invalid as zero
+    // relied on. See docs/baseline-history.md (formerly BASELINE.md). Network treats First and Invalid as zero
     // rate; CPU treats both as skip.
 
     #[test]

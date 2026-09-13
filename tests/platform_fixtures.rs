@@ -3,7 +3,7 @@
 // walker canonicalizes and then only descends into real directories, so
 // plain nested directories reproduce a live tree faithfully). These tests
 // pin parsing and fallback behavior ahead of splitting platform/linux.rs.
-// See BASELINE.md.
+// See docs/baseline-history.md (formerly BASELINE.md).
 
 use std::path::PathBuf;
 
@@ -85,7 +85,7 @@ fn powercap_missing_root_is_empty_not_error() {
 #[test]
 fn powercap_symlink_cycle_terminates() {
     // Regression test for the runaway walk found by the structural monitor
-    // tests (BASELINE.md, "Bug found while writing the baseline"). Real
+    // tests (docs/baseline-history.md (formerly BASELINE.md), "Bug found while writing the baseline"). Real
     // sysfs exposes `device` and `subsystem` symlinks inside zone dirs that
     // loop back into the zone tree. Before the fix, the walker recursed
     // through those links and blew up (strace showed thousands of `statx`

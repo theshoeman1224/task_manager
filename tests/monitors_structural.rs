@@ -1,7 +1,7 @@
 // Characterization tests for the monitors as a whole. These run against the
 // live system (real /proc and /sys), so they assert structural invariants
 // rather than exact values: label sets, metric kinds, availability fallbacks.
-// They must keep passing unchanged through the refactor. See BASELINE.md.
+// They must keep passing unchanged through the refactor. See docs/baseline-history.md (formerly BASELINE.md).
 
 use linux_task_manager::core::{MetricValue, MonitorSource};
 use linux_task_manager::monitors::{CpuMonitor, GpuMonitor, NetworkMonitor, PowerMonitor};

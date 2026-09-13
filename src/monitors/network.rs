@@ -106,7 +106,7 @@ mod tests {
     use super::choose_interface;
     use crate::platform::linux::NetworkCounters;
 
-    // Characterization tests: pin interface selection. See BASELINE.md.
+    // Characterization tests: pin interface selection. See docs/baseline-history.md (formerly BASELINE.md).
 
     fn counter(interface: &str, rx: u64, tx: u64) -> NetworkCounters {
         NetworkCounters {

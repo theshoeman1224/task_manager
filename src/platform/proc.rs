@@ -79,7 +79,7 @@ pub fn read_network_counters(proc_root: &Path) -> io::Result<Vec<NetworkCounters
 mod tests {
     use super::*;
 
-    // Characterization tests: pin parser/Math behavior. See BASELINE.md.
+    // Characterization tests: pin parser/Math behavior. See docs/baseline-history.md (formerly BASELINE.md).
 
     #[test]
     fn parses_proc_stat_cpu() {

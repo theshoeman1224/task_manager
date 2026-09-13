@@ -61,7 +61,7 @@ mod tests {
     use super::*;
 
     // Characterization tests: pin current formatting behavior ahead of the
-    // refactor. See BASELINE.md. Any change here is an output change.
+    // refactor. See docs/baseline-history.md (formerly BASELINE.md). Any change here is an output change.
 
     #[test]
     fn formats_non_finite_as_unavailable() {
