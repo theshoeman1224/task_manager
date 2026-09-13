@@ -49,10 +49,6 @@ impl MonitorSource for CpuMonitor {
             "CPU package power",
             MetricValue::watts(package_power),
         ));
-        snapshot
-            .graph_points
-            .push(("Usage".to_string(), usage.unwrap_or(0.0).clamp(0.0, 100.0)));
-
         Ok(snapshot)
     }
 }

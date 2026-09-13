@@ -56,7 +56,6 @@ pub struct MetricSnapshot {
     pub title: String,
     pub subtitle: Option<String>,
     pub metrics: Vec<Metric>,
-    pub graph_points: Vec<(String, f64)>,
 }
 
 impl MetricSnapshot {
@@ -65,7 +64,6 @@ impl MetricSnapshot {
             title: title.into(),
             subtitle: None,
             metrics: Vec::new(),
-            graph_points: Vec::new(),
         }
     }
 }

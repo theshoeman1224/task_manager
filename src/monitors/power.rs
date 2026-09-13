@@ -43,9 +43,6 @@ impl MonitorSource for PowerMonitor {
                 format!("{prefix} capacity"),
                 MetricValue::percentage(supply.capacity_percent.map(|value| value as f64)),
             ));
-            if let Some(power_watts) = supply.power_watts {
-                snapshot.graph_points.push((prefix, power_watts));
-            }
         }
 
         Ok(snapshot)

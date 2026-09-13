@@ -11,7 +11,11 @@ const DEV_ROOT: &str = "/dev";
 
 pub struct GpuMonitor {
     nvidia: Option<NvidiaGpuReader>,
-    nvidia_error: Option<String>,
+    /// Set when an NVIDIA device was detected but NVML could not be loaded
+    /// or answered with an error. Failure details feed the fallback
+    /// branch's subtitle; typed as MonitorError so every monitor reports
+    /// failure the same way.
+    nvidia_error: Option<MonitorError>,
 }
 
 // Monitors have no Default use sites; clippy's suggestion to pair each
@@ -24,7 +28,7 @@ impl GpuMonitor {
             if nvidia_devices_present(Path::new(PROC_ROOT), Path::new(DEV_ROOT)) {
                 match NvidiaGpuReader::new() {
                     Ok(reader) => (Some(reader), None),
-                    Err(err) => (None, Some(err.to_string())),
+                    Err(err) => (None, Some(MonitorError::new(err.to_string()))),
                 }
             } else {
                 (None, None)
@@ -51,7 +55,7 @@ impl MonitorSource for GpuMonitor {
                     }
                 }
                 Err(err) => {
-                    self.nvidia_error = Some(err.to_string());
+                    self.nvidia_error = Some(MonitorError::new(err.to_string()));
                 }
             }
         }
@@ -60,13 +64,12 @@ impl MonitorSource for GpuMonitor {
             .map_err(|err| MonitorError::new(err.to_string()))?;
 
         if let Some(gpu) = amd_gpus.first() {
-            let mut snapshot = gpu_snapshot(
+            let snapshot = gpu_snapshot(
                 Some(format!("AMD {}", gpu.card)),
                 gpu.utilization_percent,
                 gpu.power_watts,
                 gpu.temperature_celsius,
             );
-            push_usage_graph_point(&mut snapshot, gpu.utilization_percent);
             return Ok(snapshot);
         }
 
@@ -74,7 +77,7 @@ impl MonitorSource for GpuMonitor {
             let mut snapshot = gpu_snapshot(None, None, None, None);
             snapshot.subtitle = Some(
                 self.nvidia_error
-                    .as_deref()
+                    .as_ref()
                     .map(|err| format!("NVIDIA device detected; NVML unavailable: {err}"))
                     .unwrap_or_else(|| "NVIDIA device detected; NVML unavailable".to_string()),
             );
@@ -113,21 +116,13 @@ fn gpu_snapshot(
     snapshot
 }
 
-fn push_usage_graph_point(snapshot: &mut MetricSnapshot, usage_percent: Option<f64>) {
-    snapshot.graph_points.push((
-        "Usage".to_string(),
-        usage_percent.unwrap_or(0.0).clamp(0.0, 100.0),
-    ));
-}
-
 fn nvidia_snapshot(gpu: &NvidiaGpuInfo) -> MetricSnapshot {
-    let mut snapshot = gpu_snapshot(
+    let snapshot = gpu_snapshot(
         Some(format!("NVIDIA GPU {}", gpu.index)),
         gpu.utilization_percent,
         gpu.power_watts,
         gpu.temperature_celsius,
     );
-    push_usage_graph_point(&mut snapshot, gpu.utilization_percent);
     snapshot
 }
 
@@ -164,7 +159,6 @@ mod tests {
             snapshot.metrics[2].value,
             MetricValue::Text("61.4 C".to_string())
         );
-        assert_eq!(snapshot.graph_points, vec![("Usage".to_string(), 42.0)]);
     }
 
     #[test]
@@ -173,13 +167,14 @@ mod tests {
         assert_eq!(snapshot.metrics[0].value, MetricValue::Unavailable);
         assert_eq!(snapshot.metrics[1].value, MetricValue::Watts(80.0));
         assert_eq!(snapshot.metrics[2].value, MetricValue::Unavailable);
-        assert_eq!(snapshot.graph_points, vec![("Usage".to_string(), 0.0)]);
     }
 
     #[test]
-    fn graph_utilization_clamps_above_100() {
+    fn usage_over_100_flows_through_metric_value() {
+        // The graph_points field used to clamp here; it is gone, so only the
+        // metric value exists and it is not clamped.
         let snapshot = nvidia_snapshot(&info(150.0, None, None));
-        assert_eq!(snapshot.graph_points, vec![("Usage".to_string(), 100.0)]);
+        assert_eq!(snapshot.metrics[0].value, MetricValue::Percent(150.0));
     }
 
     #[test]

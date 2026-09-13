@@ -18,6 +18,7 @@ use gtk4::{
 };
 
 use crate::config::AppConfig;
+use crate::monitors::build_sources;
 use sampler::start_samplers;
 use tabs::MonitorTab;
 
@@ -38,11 +39,15 @@ fn build_ui(app: &Application) {
             .try_into()
             .unwrap_or(1000),
     ));
-    let snapshots = start_samplers(config.clone(), Arc::clone(&update_interval_ms));
+    // One registry drives both the tabs and the sampler threads; the tab
+    // titles are nothing more than each source's name().
+    let sources = build_sources(&config);
+    let tab_titles: Vec<&'static str> = sources.iter().map(|source| source.name()).collect();
+    let snapshots = start_samplers(sources, Arc::clone(&update_interval_ms));
 
     let notebook = Notebook::new();
     let tabs = Rc::new(RefCell::new(HashMap::new()));
-    for title in ["CPU", "GPU", "Network", "Power"] {
+    for title in tab_titles {
         let tab = MonitorTab::new(title, config.graph_history_points);
         notebook.append_page(&tab.root, Some(&Label::new(Some(title))));
         tabs.borrow_mut().insert(title.to_string(), tab);

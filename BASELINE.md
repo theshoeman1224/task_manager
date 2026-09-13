@@ -24,8 +24,8 @@ Command record from the tagged commit:
 Allowed, explicit output/API changes during rework (each must be called out in review; everything
 else must hold output byte-identical):
 1. Removing `read_nvidia_gpus()` — unused free function. Executed during Phase 2.
-2. Removing the `graph_points` field from `MetricSnapshot` if the UI keeps reading only its own
-   `MetricRow` series — currently every monitor writes the field and nothing reads it. Still pending.
+2. Removing the `MetricSnapshot.graph_points` field — the UI never read it. Executed during
+   Phase 3 (see the Phase 3 record).
 
 Phase 2 record (deliberate changes beyond pure deduplication):
 - `read_nvidia_gpus()` removed from `platform/nvidia.rs` and the `platform/linux` facade.
@@ -45,6 +45,27 @@ Phase 2 record (deliberate changes beyond pure deduplication):
   (all-Unavailable with error-free subtitles) deliberately do not, matching old output.
 - Test counts after Phase 2: 56 headless (41 lib incl. 6 DeltaTracker tests, 5 structural,
   10 fixture), 60 with `--features gui`.
+
+Phase 3 record (deliberate changes beyond pure wiring cleanup):
+- `MetricSnapshot.graph_points` deleted. Every monitor tracked it but the UI consumed
+  only `MetricRow`'s own series (via `graph_value()`), so output is unchanged. The one
+  behavior nuance retired with it: gpu/cpu graph data clamped usage to [0, 100] inside
+  the monitor; the visible graph still clamps in `draw_graph()` (y clamped to the
+  drawing area), so rendered output is the same. Tests asserting graph_points contents
+  were removed along with the field, as planned and flagged here.
+- `monitors::build_sources(&AppConfig)` is now the single monitor registry. The UI's
+  tab notebooks and sampler threads both derive from it (`MonitorTab` titles come from
+  `MonitorSource::name()`), ending the four-place name/registration hardcoding that
+  made adding a monitor cost edits in `monitors/mod.rs`, the tab array, `start_samplers`,
+  and the tab lookup map.
+- `GpuMonitor.nvidia_error` retyped from `Option<String>` to `Option<MonitorError>`.
+  Everything now reports failure through `MonitorError`; built subtitle strings are
+  byte-identical, so the GPU tab output does not change.
+- `ui/sampler.rs::start_samplers` now takes the already-built source list instead of
+  constructing it from `AppConfig` itself; bootstrap still passes config values
+  (interval, default network interface, history point count) exactly as before.
+- Test counts after Phase 3: unchanged from Phase 2 (same 56/60), the deleted
+  graph_points assertions replaced by one usage-over-100 metric pin.
 
 Anything else (label strings, subtitle strings, formats like `"%.1f C"`, clamping, availability
 fallback order) must flow through the split code untouched; the characterization and fixture

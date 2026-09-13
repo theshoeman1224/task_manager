@@ -70,15 +70,6 @@ fn cpu_snapshot_shape() {
         second.metrics[1].value,
         MetricValue::Watts(_) | MetricValue::Unavailable
     ));
-    // graph_points still carry the clamped usage point on every sample
-    // (pinned: removing the field is an explicit output change, BASELINE.md).
-    assert_eq!(second.graph_points.len(), 1);
-    let (label, value) = &second.graph_points[0];
-    assert_eq!(label, "Usage");
-    assert!(
-        (0.0..=100.0).contains(value),
-        "graph usage clamped: {value}"
-    );
 }
 
 #[test]
@@ -109,9 +100,6 @@ fn network_snapshot_shape() {
     for total in &first.metrics[2..4] {
         assert!(matches!(total.value, MetricValue::Bytes(_)));
     }
-    assert_eq!(first.graph_points.len(), 2, "RX and TX rate points");
-    assert_eq!(first.graph_points[0].0, "RX");
-    assert_eq!(first.graph_points[1].0, "TX");
 }
 
 #[test]
@@ -129,18 +117,8 @@ fn power_snapshot_shape() {
     }
 
     // With supplies present: two metrics per supply, named
-    // "<name> <kind> power" and "<name> <kind> capacity", plus one graph
-    // point per supply that reported power.
+    // "<name> <kind> power" and "<name> <kind> capacity".
     assert_eq!(snapshot.metrics.len() % 2, 0, "metrics pair per supply");
-    let mut graph_labels: Vec<&str> = snapshot
-        .graph_points
-        .iter()
-        .map(|(l, _)| l.as_str())
-        .collect();
-    graph_labels.sort_unstable();
-    for label in graph_labels {
-        assert!(label.ends_with(" power"), "graph label {label}");
-    }
 }
 
 #[test]

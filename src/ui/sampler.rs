@@ -7,25 +7,15 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use crate::config::AppConfig;
 use crate::core::{MetricSnapshot, MonitorSource};
-use crate::monitors::{CpuMonitor, GpuMonitor, NetworkMonitor, PowerMonitor};
 
 pub(super) const MIN_SAMPLING_INTERVAL_MS: u64 = 250;
 
 pub(super) fn start_samplers(
-    config: AppConfig,
+    sources: Vec<Box<dyn MonitorSource>>,
     update_interval_ms: Arc<AtomicU64>,
 ) -> Receiver<MetricSnapshot> {
     let (sender, receiver) = mpsc::channel();
-    let sources: Vec<Box<dyn MonitorSource>> = vec![
-        Box::new(CpuMonitor::new()),
-        Box::new(GpuMonitor::new()),
-        Box::new(NetworkMonitor::new(
-            config.default_network_interface.clone(),
-        )),
-        Box::new(PowerMonitor::new()),
-    ];
 
     for source in sources {
         start_monitor_thread(source, sender.clone(), Arc::clone(&update_interval_ms));

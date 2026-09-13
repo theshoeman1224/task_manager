@@ -80,9 +80,6 @@ impl MonitorSource for NetworkMonitor {
             "Transmitted total",
             MetricValue::Bytes(current.tx_bytes),
         ));
-        snapshot.graph_points.push(("RX".to_string(), rx_rate));
-        snapshot.graph_points.push(("TX".to_string(), tx_rate));
-
         Ok(snapshot)
     }
 }
