@@ -1,7 +1,13 @@
+use std::path::Path;
+
 use crate::core::{Metric, MetricSnapshot, MetricValue, MonitorError, MonitorSource};
 use crate::platform::linux::{
     nvidia_devices_present, read_amd_gpus, NvidiaGpuInfo, NvidiaGpuReader,
 };
+
+const PROC_ROOT: &str = "/proc";
+const SYS_ROOT: &str = "/sys";
+const DEV_ROOT: &str = "/dev";
 
 pub struct GpuMonitor {
     nvidia: Option<NvidiaGpuReader>,
@@ -10,7 +16,10 @@ pub struct GpuMonitor {
 
 impl GpuMonitor {
     pub fn new() -> Self {
-        let (nvidia, nvidia_error) = if nvidia_devices_present() {
+        let (nvidia, nvidia_error) = if nvidia_devices_present(
+            Path::new(PROC_ROOT),
+            Path::new(DEV_ROOT),
+        ) {
             match NvidiaGpuReader::new() {
                 Ok(reader) => (Some(reader), None),
                 Err(err) => (None, Some(err.to_string())),
@@ -51,7 +60,7 @@ impl MonitorSource for GpuMonitor {
             }
         }
 
-        let amd_gpus = read_amd_gpus(std::path::Path::new("/sys/class/drm"))
+        let amd_gpus = read_amd_gpus(Path::new(&format!("{SYS_ROOT}/class/drm")))
             .map_err(|err| MonitorError::new(err.to_string()))?;
         let mut snapshot = MetricSnapshot::new("GPU");
 
@@ -82,7 +91,7 @@ impl MonitorSource for GpuMonitor {
             return Ok(snapshot);
         }
 
-        if nvidia_devices_present() {
+        if nvidia_devices_present(Path::new(PROC_ROOT), Path::new(DEV_ROOT)) {
             snapshot.subtitle = Some(
                 self.nvidia_error
                     .as_deref()

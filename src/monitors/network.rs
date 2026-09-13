@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::Path;
 use std::time::Instant;
 
 use crate::core::{Metric, MetricSnapshot, MetricValue, MonitorError, MonitorSource};
@@ -25,7 +26,8 @@ impl MonitorSource for NetworkMonitor {
 
     fn sample(&mut self) -> Result<MetricSnapshot, MonitorError> {
         let now = Instant::now();
-        let counters = read_network_counters().map_err(|err| MonitorError::new(err.to_string()))?;
+        let counters = read_network_counters(Path::new("/proc"))
+            .map_err(|err| MonitorError::new(err.to_string()))?;
         let active = choose_interface(&counters, self.selected_interface.as_deref());
 
         let mut snapshot = MetricSnapshot::new("Network");

@@ -35,8 +35,8 @@ pub fn cpu_usage_percent(previous: CpuTimes, current: CpuTimes) -> Option<f64> {
     Some(((total_delta.saturating_sub(idle_delta)) as f64 / total_delta as f64) * 100.0)
 }
 
-pub fn read_cpu_times() -> io::Result<CpuTimes> {
-    let contents = fs::read_to_string("/proc/stat")?;
+pub fn read_cpu_times(proc_root: &Path) -> io::Result<CpuTimes> {
+    let contents = fs::read_to_string(proc_root.join("stat"))?;
     contents
         .lines()
         .find_map(parse_proc_stat_cpu)
@@ -69,8 +69,8 @@ pub fn parse_proc_net_dev(contents: &str) -> Vec<NetworkCounters> {
         .collect()
 }
 
-pub fn read_network_counters() -> io::Result<Vec<NetworkCounters>> {
-    let contents = fs::read_to_string("/proc/net/dev")?;
+pub fn read_network_counters(proc_root: &Path) -> io::Result<Vec<NetworkCounters>> {
+    let contents = fs::read_to_string(proc_root.join("net/dev"))?;
     Ok(parse_proc_net_dev(&contents))
 }
 
@@ -241,8 +241,8 @@ pub fn read_amd_gpus(drm_root: &Path) -> io::Result<Vec<AmdGpuInfo>> {
     Ok(gpus)
 }
 
-pub fn nvidia_devices_present() -> bool {
-    Path::new("/proc/driver/nvidia/gpus").exists() || Path::new("/dev/nvidiactl").exists()
+pub fn nvidia_devices_present(sys_root: &Path, dev_root: &Path) -> bool {
+    sys_root.join("driver/nvidia/gpus").exists() || dev_root.join("nvidiactl").exists()
 }
 
 #[derive(Debug, Clone, PartialEq)]

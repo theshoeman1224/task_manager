@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use crate::core::{Metric, MetricSnapshot, MetricValue, MonitorError, MonitorSource};
@@ -33,7 +33,8 @@ impl MonitorSource for CpuMonitor {
     }
 
     fn sample(&mut self) -> Result<MetricSnapshot, MonitorError> {
-        let current = read_cpu_times().map_err(|err| MonitorError::new(err.to_string()))?;
+        let current = read_cpu_times(Path::new("/proc"))
+            .map_err(|err| MonitorError::new(err.to_string()))?;
         let usage = self
             .previous_times
             .and_then(|previous| cpu_usage_percent(previous, current));
@@ -67,7 +68,7 @@ impl CpuMonitor {
     fn sample_package_power(&mut self) -> Option<f64> {
         let now = Instant::now();
         let counters =
-            read_powercap_energy_counters(PathBuf::from("/sys/class/powercap").as_path()).ok()?;
+            read_powercap_energy_counters(Path::new("/sys/class/powercap")).ok()?;
         let mut total_watts = 0.0;
         let mut found = false;
 
