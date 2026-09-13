@@ -53,3 +53,13 @@ real systems is the same: energy zones live in real directories below the canoni
 
 After the fix the full suite (35 lib tests + 5 structural tests) passes repeatedly and takes
 about 0.07 s for the integration tests.
+
+Final baseline after all characterization + fixture work landed:
+
+- `cargo test`: 49 passed (35 lib unit tests, 5 monitors structural, 9 platform fixtures)
+- `cargo test --features gui`: 49 passed, plus 4 UI characterization tests (graph_value,
+  graph_max floors, scale_text per-unit formats) under `src/ui/mod.rs`'s inline module
+- `cargo clippy --all-features --all-targets`: same 6 warnings / 4 distinct lints as the
+  tagged commit, no new warnings introduced
+- The `graph_points` outputs are pinned by both the structural tests and the GPU inline
+  tests, so its later removal stays a reviewed, explicit change.
