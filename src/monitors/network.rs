@@ -1,20 +1,25 @@
-use std::collections::HashMap;
 use std::path::Path;
 use std::time::Instant;
 
-use crate::core::{Metric, MetricSnapshot, MetricValue, MonitorError, MonitorSource};
+use crate::core::{
+    DeltaSample, DeltaTracker, Metric, MetricSnapshot, MetricValue, MonitorError, MonitorSource,
+};
 use crate::platform::linux::{read_network_counters, NetworkCounters};
+
+const PROC_ROOT: &str = "/proc";
 
 pub struct NetworkMonitor {
     selected_interface: Option<String>,
-    previous: HashMap<String, (NetworkCounters, Instant)>,
+    previous_rx: DeltaTracker<String>,
+    previous_tx: DeltaTracker<String>,
 }
 
 impl NetworkMonitor {
     pub fn new(selected_interface: Option<String>) -> Self {
         Self {
             selected_interface,
-            previous: HashMap::new(),
+            previous_rx: DeltaTracker::new(),
+            previous_tx: DeltaTracker::new(),
         }
     }
 }
@@ -25,8 +30,7 @@ impl MonitorSource for NetworkMonitor {
     }
 
     fn sample(&mut self) -> Result<MetricSnapshot, MonitorError> {
-        let now = Instant::now();
-        let counters = read_network_counters(Path::new("/proc"))
+        let counters = read_network_counters(Path::new(PROC_ROOT))
             .map_err(|err| MonitorError::new(err.to_string()))?;
         let active = choose_interface(&counters, self.selected_interface.as_deref());
 
@@ -43,22 +47,23 @@ impl MonitorSource for NetworkMonitor {
         };
 
         snapshot.subtitle = Some(current.interface.clone());
-        let (rx_rate, tx_rate) = self
-            .previous
-            .get(&current.interface)
-            .and_then(|(previous, previous_time)| {
-                let elapsed = now.duration_since(*previous_time).as_secs_f64();
-                (elapsed > 0.0).then(|| {
-                    (
-                        current.rx_bytes.saturating_sub(previous.rx_bytes) as f64 / elapsed,
-                        current.tx_bytes.saturating_sub(previous.tx_bytes) as f64 / elapsed,
-                    )
-                })
-            })
-            .unwrap_or((0.0, 0.0));
+        let now = Instant::now();
+        let interface = current.interface.clone();
 
-        self.previous
-            .insert(current.interface.clone(), (current.clone(), now));
+        let rx_rate = match self
+            .previous_rx
+            .record(interface.clone(), current.rx_bytes, now)
+        {
+            // First tick and reset/zero-elapsed ticks show zero rates,
+            // exactly like the pre-refactor `unwrap_or((0.0, 0.0))` fallback.
+            DeltaSample::First | DeltaSample::Invalid => None,
+            DeltaSample::Changed(bytes, elapsed_secs) => Some(bytes as f64 / elapsed_secs),
+        };
+        let tx_rate = match self.previous_tx.record(interface, current.tx_bytes, now) {
+            DeltaSample::First | DeltaSample::Invalid => None,
+            DeltaSample::Changed(bytes, elapsed_secs) => Some(bytes as f64 / elapsed_secs),
+        };
+        let (rx_rate, tx_rate) = (rx_rate.unwrap_or(0.0), tx_rate.unwrap_or(0.0));
 
         snapshot
             .metrics
@@ -104,7 +109,7 @@ mod tests {
     use super::choose_interface;
     use crate::platform::linux::NetworkCounters;
 
-    // Characterization tests: pin interface selection ahead of the refactor.
+    // Characterization tests: pin interface selection. See BASELINE.md.
 
     fn counter(interface: &str, rx: u64, tx: u64) -> NetworkCounters {
         NetworkCounters {
@@ -116,10 +121,7 @@ mod tests {
 
     #[test]
     fn prefers_selected_interface() {
-        let counters = vec![
-            counter("eth0", 10, 10),
-            counter("wlan0", 1, 1),
-        ];
+        let counters = vec![counter("eth0", 10, 10), counter("wlan0", 1, 1)];
 
         assert_eq!(
             choose_interface(&counters, Some("wlan0"))
@@ -139,20 +141,14 @@ mod tests {
 
     #[test]
     fn skips_loopback_for_auto_selection() {
-        let counters = vec![
-            counter("lo", 1000, 1000),
-            counter("eth0", 10, 20),
-        ];
+        let counters = vec![counter("lo", 1000, 1000), counter("eth0", 10, 20)];
         let chosen = choose_interface(&counters, None).unwrap();
         assert_eq!(chosen.interface, "eth0");
     }
 
     #[test]
     fn picks_busiest_interface_by_rx_plus_tx() {
-        let counters = vec![
-            counter("eth0", 10, 10),
-            counter("wlan0", 1, 100),
-        ];
+        let counters = vec![counter("eth0", 10, 10), counter("wlan0", 1, 100)];
         let chosen = choose_interface(&counters, None).unwrap();
         assert_eq!(chosen.interface, "wlan0");
     }
@@ -177,10 +173,7 @@ mod tests {
     fn tie_keeps_first_max() {
         // max_by_key keeps the last maximal element on ties; both counters
         // tie, so wlan0 (later in the vec) is picked over eth0.
-        let counters = vec![
-            counter("eth0", 100, 100),
-            counter("wlan0", 100, 100),
-        ];
+        let counters = vec![counter("eth0", 100, 100), counter("wlan0", 100, 100)];
         let chosen = choose_interface(&counters, None).unwrap();
         assert_eq!(chosen.interface, "wlan0");
     }

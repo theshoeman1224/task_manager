@@ -59,10 +59,9 @@ fn cpu_snapshot_shape() {
     // After a second tick the usage metric is either a real percentage in
     // [0, 100] or Unavailable if the total counter did not move.
     match &second.metrics[0].value {
-        MetricValue::Percent(v) => assert!(
-            (0.0..=100.0).contains(v),
-            "usage outside [0, 100]: {v}"
-        ),
+        MetricValue::Percent(v) => {
+            assert!((0.0..=100.0).contains(v), "usage outside [0, 100]: {v}")
+        }
         MetricValue::Unavailable => {}
         other => panic!("expected Percent or Unavailable, got {other:?}"),
     }
@@ -76,7 +75,10 @@ fn cpu_snapshot_shape() {
     assert_eq!(second.graph_points.len(), 1);
     let (label, value) = &second.graph_points[0];
     assert_eq!(label, "Usage");
-    assert!((0.0..=100.0).contains(value), "graph usage clamped: {value}");
+    assert!(
+        (0.0..=100.0).contains(value),
+        "graph usage clamped: {value}"
+    );
 }
 
 #[test]
@@ -90,7 +92,9 @@ fn network_snapshot_shape() {
         // No eligible interface found: the fixed Unavailable pair.
         assert_eq!(first.metrics[0].value, MetricValue::Unavailable);
         assert_eq!(first.metrics[1].value, MetricValue::Unavailable);
-        assert!(first.subtitle.is_none_or(|s| s.contains("No network interfaces")));
+        assert!(first
+            .subtitle
+            .is_none_or(|s| s.contains("No network interfaces")));
         return;
     }
 
@@ -128,8 +132,11 @@ fn power_snapshot_shape() {
     // "<name> <kind> power" and "<name> <kind> capacity", plus one graph
     // point per supply that reported power.
     assert_eq!(snapshot.metrics.len() % 2, 0, "metrics pair per supply");
-    let mut graph_labels: Vec<&str> =
-        snapshot.graph_points.iter().map(|(l, _)| l.as_str()).collect();
+    let mut graph_labels: Vec<&str> = snapshot
+        .graph_points
+        .iter()
+        .map(|(l, _)| l.as_str())
+        .collect();
     graph_labels.sort_unstable();
     for label in graph_labels {
         assert!(label.ends_with(" power"), "graph label {label}");

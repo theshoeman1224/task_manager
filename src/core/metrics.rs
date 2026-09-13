@@ -11,6 +11,31 @@ pub enum MetricValue {
     Unavailable,
 }
 
+impl MetricValue {
+    /// Percent or Unavailable, collapsing the
+    /// `Option.map(MetricValue::Percent).unwrap_or(Unavailable)` boilerplate
+    /// that used to appear in every monitor.
+    pub fn percentage(value: Option<f64>) -> Self {
+        value
+            .map(MetricValue::Percent)
+            .unwrap_or(MetricValue::Unavailable)
+    }
+
+    /// Watts or Unavailable.
+    pub fn watts(value: Option<f64>) -> Self {
+        value
+            .map(MetricValue::Watts)
+            .unwrap_or(MetricValue::Unavailable)
+    }
+
+    /// Human-oriented temperature text or Unavailable; one decimal, then " C".
+    pub fn celsius(value: Option<f64>) -> Self {
+        value
+            .map(|value| MetricValue::Text(format!("{value:.1} C")))
+            .unwrap_or(MetricValue::Unavailable)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Metric {
     pub name: String,

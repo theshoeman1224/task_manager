@@ -6,7 +6,7 @@
 
 pub use super::{
     amd::{read_amd_gpus, AmdGpuInfo},
-    nvidia::{nvidia_devices_present, read_nvidia_gpus, NvidiaGpuInfo, NvidiaGpuReader},
+    nvidia::{nvidia_devices_present, NvidiaGpuInfo, NvidiaGpuReader},
     power::{read_power_supplies, read_powercap_energy_counters, EnergyCounter, PowerSupply},
     proc::{
         cpu_usage_percent, parse_proc_net_dev, parse_proc_stat_cpu, read_cpu_times,
@@ -21,8 +21,8 @@ mod tests {
     #[allow(unused_imports)]
     use super::{
         cpu_usage_percent, nvidia_devices_present, parse_proc_net_dev, parse_proc_stat_cpu,
-        read_amd_gpus, read_cpu_times, read_network_counters, read_nvidia_gpus,
-        read_power_supplies, read_powercap_energy_counters, AmdGpuInfo, CpuTimes,
-        EnergyCounter, NetworkCounters, NvidiaGpuInfo, NvidiaGpuReader, PowerSupply,
+        read_amd_gpus, read_cpu_times, read_network_counters, read_power_supplies,
+        read_powercap_energy_counters, AmdGpuInfo, CpuTimes, EnergyCounter, NetworkCounters,
+        NvidiaGpuInfo, NvidiaGpuReader, PowerSupply,
     };
 }

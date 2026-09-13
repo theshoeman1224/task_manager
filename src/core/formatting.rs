@@ -100,7 +100,10 @@ mod tests {
     #[test]
     fn formats_metric_value_variants() {
         assert_eq!(format_metric_value(&MetricValue::Count(42)), "42");
-        assert_eq!(format_metric_value(&MetricValue::Text("hello".to_string())), "hello");
+        assert_eq!(
+            format_metric_value(&MetricValue::Text("hello".to_string())),
+            "hello"
+        );
         assert_eq!(format_metric_value(&MetricValue::Bytes(2048)), "2.0 KB");
         assert_eq!(format_metric_value(&MetricValue::Percent(3.21)), "3.2%");
     }

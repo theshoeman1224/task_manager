@@ -23,9 +23,28 @@ Command record from the tagged commit:
 
 Allowed, explicit output/API changes during rework (each must be called out in review; everything
 else must hold output byte-identical):
-1. Removing `read_nvidia_gpus()` (`src/platform/linux.rs:235`) — unused free function.
+1. Removing `read_nvidia_gpus()` — unused free function. Executed during Phase 2.
 2. Removing the `graph_points` field from `MetricSnapshot` if the UI keeps reading only its own
-   `MetricRow` series — currently every monitor writes the field and nothing reads it.
+   `MetricRow` series — currently every monitor writes the field and nothing reads it. Still pending.
+
+Phase 2 record (deliberate changes beyond pure deduplication):
+- `read_nvidia_gpus()` removed from `platform/nvidia.rs` and the `platform/linux` facade.
+  It had no callers; `NvidiaGpuReader` remains the only NVML entry point.
+- The three monitor `impl Default` boilerplates (Cpu/Gpu/PowerMonitor) were dropped;
+  nothing constructed them via `default()` anywhere. Clippy's `new_without_default`
+  suggestion is intentionally suppressed per monitor so the lint baseline stays identical.
+- `DeltaTracker` (core/delta.rs) now backs both network rates and CPU package power.
+  Its `DeltaSample` semantics were derived from the two monitors' old edge handling:
+  First = no previous record; Invalid = zero elapsed or counter rollback (network maps
+  both to zero rates, power skips; equal to the old `saturating_sub`/guard outcomes);
+  Changed = delta with monotonic increase.
+- `MetricValue::percentage/watts/celsius` helpers replaced 14 hand-rolled
+  `Option.map(...).unwrap_or(Unavailable)` blocks; contents identical.
+- GPU snapshot construction consolidated into one `gpu_snapshot()` builder plus
+  `push_usage_graph_point()`; real branches add the graph point, fallback branches
+  (all-Unavailable with error-free subtitles) deliberately do not, matching old output.
+- Test counts after Phase 2: 56 headless (41 lib incl. 6 DeltaTracker tests, 5 structural,
+  10 fixture), 60 with `--features gui`.
 
 Anything else (label strings, subtitle strings, formats like `"%.1f C"`, clamping, availability
 fallback order) must flow through the split code untouched; the characterization and fixture

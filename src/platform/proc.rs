@@ -127,31 +127,55 @@ mod tests {
 
     #[test]
     fn usage_is_none_when_no_time_elapses() {
-        let previous = CpuTimes { idle: 80, total: 100 };
-        let current = CpuTimes { idle: 80, total: 100 };
+        let previous = CpuTimes {
+            idle: 80,
+            total: 100,
+        };
+        let current = CpuTimes {
+            idle: 80,
+            total: 100,
+        };
         assert_eq!(cpu_usage_percent(previous, current), None);
     }
 
     #[test]
     fn usage_is_none_when_total_counter_goes_backwards() {
         // checked_sub on total_delta: backwards counters yield None, not panic.
-        let previous = CpuTimes { idle: 80, total: 100 };
-        let current = CpuTimes { idle: 90, total: 50 };
+        let previous = CpuTimes {
+            idle: 80,
+            total: 100,
+        };
+        let current = CpuTimes {
+            idle: 90,
+            total: 50,
+        };
         assert_eq!(cpu_usage_percent(previous, current), None);
     }
 
     #[test]
     fn usage_clamps_idle_backslide_to_100_percent() {
         // saturating_sub on idle_delta: idle counter resets clamp busy to 100%.
-        let previous = CpuTimes { idle: 90, total: 100 };
-        let current = CpuTimes { idle: 0, total: 200 };
+        let previous = CpuTimes {
+            idle: 90,
+            total: 100,
+        };
+        let current = CpuTimes {
+            idle: 0,
+            total: 200,
+        };
         assert_eq!(cpu_usage_percent(previous, current), Some(100.0));
     }
 
     #[test]
     fn idle_only_delta_reports_zero_usage() {
-        let previous = CpuTimes { idle: 80, total: 100 };
-        let current = CpuTimes { idle: 180, total: 200 };
+        let previous = CpuTimes {
+            idle: 80,
+            total: 100,
+        };
+        let current = CpuTimes {
+            idle: 180,
+            total: 200,
+        };
         assert_eq!(cpu_usage_percent(previous, current), Some(0.0));
     }
 

@@ -5,9 +5,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::core::{
-    format_bytes, format_bytes_per_sec, format_percent, format_watts, MetricValue,
-};
+use crate::core::{format_bytes, format_bytes_per_sec, format_percent, format_watts, MetricValue};
 
 pub(crate) type SharedGraphState = Rc<RefCell<GraphState>>;
 
@@ -137,7 +135,10 @@ mod tests {
             scale_text(&MetricValue::Percent(0.0), f64::NAN),
             "Scale: 0 - 100.0%"
         );
-        assert_eq!(scale_text(&MetricValue::Watts(0.0), 3.0), "Scale: 0 - 3.00 W");
+        assert_eq!(
+            scale_text(&MetricValue::Watts(0.0), 3.0),
+            "Scale: 0 - 3.00 W"
+        );
         assert_eq!(
             scale_text(&MetricValue::BytesPerSecond(0.0), 1e6),
             "Scale: 0 - 1.0 MB/s"

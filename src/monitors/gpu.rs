@@ -14,30 +14,26 @@ pub struct GpuMonitor {
     nvidia_error: Option<String>,
 }
 
+// Monitors have no Default use sites; clippy's suggestion to pair each
+// new() with a Default impl would just re-create the boilerplate removed
+// in this phase.
+#[allow(clippy::new_without_default)]
 impl GpuMonitor {
     pub fn new() -> Self {
-        let (nvidia, nvidia_error) = if nvidia_devices_present(
-            Path::new(PROC_ROOT),
-            Path::new(DEV_ROOT),
-        ) {
-            match NvidiaGpuReader::new() {
-                Ok(reader) => (Some(reader), None),
-                Err(err) => (None, Some(err.to_string())),
-            }
-        } else {
-            (None, None)
-        };
+        let (nvidia, nvidia_error) =
+            if nvidia_devices_present(Path::new(PROC_ROOT), Path::new(DEV_ROOT)) {
+                match NvidiaGpuReader::new() {
+                    Ok(reader) => (Some(reader), None),
+                    Err(err) => (None, Some(err.to_string())),
+                }
+            } else {
+                (None, None)
+            };
 
         Self {
             nvidia,
             nvidia_error,
         }
-    }
-}
-
-impl Default for GpuMonitor {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -62,93 +58,76 @@ impl MonitorSource for GpuMonitor {
 
         let amd_gpus = read_amd_gpus(Path::new(&format!("{SYS_ROOT}/class/drm")))
             .map_err(|err| MonitorError::new(err.to_string()))?;
-        let mut snapshot = MetricSnapshot::new("GPU");
 
         if let Some(gpu) = amd_gpus.first() {
-            snapshot.subtitle = Some(format!("AMD {}", gpu.card));
-            snapshot.metrics.push(Metric::new(
-                "Usage",
-                gpu.utilization_percent
-                    .map(MetricValue::Percent)
-                    .unwrap_or(MetricValue::Unavailable),
-            ));
-            snapshot.metrics.push(Metric::new(
-                "GPU power",
-                gpu.power_watts
-                    .map(MetricValue::Watts)
-                    .unwrap_or(MetricValue::Unavailable),
-            ));
-            snapshot.metrics.push(Metric::new(
-                "Temperature",
-                gpu.temperature_celsius
-                    .map(|value| MetricValue::Text(format!("{value:.1} C")))
-                    .unwrap_or(MetricValue::Unavailable),
-            ));
-            snapshot.graph_points.push((
-                "Usage".to_string(),
-                gpu.utilization_percent.unwrap_or(0.0).clamp(0.0, 100.0),
-            ));
+            let mut snapshot = gpu_snapshot(
+                Some(format!("AMD {}", gpu.card)),
+                gpu.utilization_percent,
+                gpu.power_watts,
+                gpu.temperature_celsius,
+            );
+            push_usage_graph_point(&mut snapshot, gpu.utilization_percent);
             return Ok(snapshot);
         }
 
         if nvidia_devices_present(Path::new(PROC_ROOT), Path::new(DEV_ROOT)) {
+            let mut snapshot = gpu_snapshot(None, None, None, None);
             snapshot.subtitle = Some(
                 self.nvidia_error
                     .as_deref()
                     .map(|err| format!("NVIDIA device detected; NVML unavailable: {err}"))
                     .unwrap_or_else(|| "NVIDIA device detected; NVML unavailable".to_string()),
             );
-            snapshot
-                .metrics
-                .push(Metric::new("Usage", MetricValue::Unavailable));
-            snapshot
-                .metrics
-                .push(Metric::new("GPU power", MetricValue::Unavailable));
-            snapshot
-                .metrics
-                .push(Metric::new("Temperature", MetricValue::Unavailable));
             return Ok(snapshot);
         }
 
+        let mut snapshot = gpu_snapshot(None, None, None, None);
         snapshot.subtitle = Some("No supported AMD or NVIDIA GPU telemetry found".to_string());
-        snapshot
-            .metrics
-            .push(Metric::new("Usage", MetricValue::Unavailable));
-        snapshot
-            .metrics
-            .push(Metric::new("GPU power", MetricValue::Unavailable));
-        snapshot
-            .metrics
-            .push(Metric::new("Temperature", MetricValue::Unavailable));
         Ok(snapshot)
     }
 }
 
-fn nvidia_snapshot(gpu: &NvidiaGpuInfo) -> MetricSnapshot {
+/// Builds the GPU snapshot's metric row set (Usage / GPU power / Temperature,
+/// in that order) from optional f64 readings; `None` at any slot yields
+/// Unavailable, exactly as each monitor branch used to build by hand. The
+/// fallback branches pass all-None for the metrics and then overwrite the
+/// subtitle, matching the duplicated blocks this replaces.
+fn gpu_snapshot(
+    subtitle: Option<String>,
+    usage: Option<f64>,
+    power: Option<f64>,
+    temperature: Option<f64>,
+) -> MetricSnapshot {
     let mut snapshot = MetricSnapshot::new("GPU");
-    snapshot.subtitle = Some(format!("NVIDIA GPU {}", gpu.index));
-    snapshot.metrics.push(Metric::new(
-        "Usage",
-        gpu.utilization_percent
-            .map(MetricValue::Percent)
-            .unwrap_or(MetricValue::Unavailable),
-    ));
-    snapshot.metrics.push(Metric::new(
-        "GPU power",
-        gpu.power_watts
-            .map(MetricValue::Watts)
-            .unwrap_or(MetricValue::Unavailable),
-    ));
+    snapshot.subtitle = subtitle;
+    snapshot
+        .metrics
+        .push(Metric::new("Usage", MetricValue::percentage(usage)));
+    snapshot
+        .metrics
+        .push(Metric::new("GPU power", MetricValue::watts(power)));
     snapshot.metrics.push(Metric::new(
         "Temperature",
-        gpu.temperature_celsius
-            .map(|value| MetricValue::Text(format!("{value:.1} C")))
-            .unwrap_or(MetricValue::Unavailable),
+        MetricValue::celsius(temperature),
     ));
+    snapshot
+}
+
+fn push_usage_graph_point(snapshot: &mut MetricSnapshot, usage_percent: Option<f64>) {
     snapshot.graph_points.push((
         "Usage".to_string(),
-        gpu.utilization_percent.unwrap_or(0.0).clamp(0.0, 100.0),
+        usage_percent.unwrap_or(0.0).clamp(0.0, 100.0),
     ));
+}
+
+fn nvidia_snapshot(gpu: &NvidiaGpuInfo) -> MetricSnapshot {
+    let mut snapshot = gpu_snapshot(
+        Some(format!("NVIDIA GPU {}", gpu.index)),
+        gpu.utilization_percent,
+        gpu.power_watts,
+        gpu.temperature_celsius,
+    );
+    push_usage_graph_point(&mut snapshot, gpu.utilization_percent);
     snapshot
 }
 

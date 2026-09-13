@@ -7,14 +7,16 @@
 
 use std::path::PathBuf;
 
-use linux_task_manager::platform::linux::{
-    parse_proc_net_dev, read_amd_gpus, read_cpu_times, read_network_counters,
-    read_power_supplies, read_powercap_energy_counters, NetworkCounters,
-};
 use linux_task_manager::platform::linux::EnergyCounter;
+use linux_task_manager::platform::linux::{
+    parse_proc_net_dev, read_amd_gpus, read_cpu_times, read_network_counters, read_power_supplies,
+    read_powercap_energy_counters, NetworkCounters,
+};
 
 fn fixture(rel: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(rel)
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(rel)
 }
 
 #[test]
@@ -52,7 +54,11 @@ fn proc_stat_missing_root_errors() {
 fn powercap_fixture_walks_zone_tree() {
     let counters =
         read_powercap_energy_counters(&fixture("sys/class/powercap")).expect("fixture reads");
-    assert_eq!(counters.len(), 2, "only zones with parseable energy_uj; the bogus zone has garbage energy so is excluded");
+    assert_eq!(
+        counters.len(),
+        2,
+        "only zones with parseable energy_uj; the bogus zone has garbage energy so is excluded"
+    );
     let by_name = |suffix: &str| -> &EnergyCounter {
         counters
             .iter()
@@ -89,7 +95,11 @@ fn powercap_symlink_cycle_terminates() {
     // symlinks entirely, and report only the real zone once.
     let counters = read_powercap_energy_counters(&fixture("sys-cycles/class/powercap"))
         .expect("fixture root reads");
-    assert_eq!(counters.len(), 1, "symlinked back-references must not create counters or recursion");
+    assert_eq!(
+        counters.len(),
+        1,
+        "symlinked back-references must not create counters or recursion"
+    );
     assert_eq!(counters[0].name, ".cycle-zone");
     assert_eq!(counters[0].energy_uj, 777777777);
     assert!(counters[0].path.ends_with("zoneA"));
@@ -122,8 +132,7 @@ fn amd_missing_root_is_empty_not_error() {
 
 #[test]
 fn power_supplies_fixture_units_and_fallbacks() {
-    let supplies =
-        read_power_supplies(&fixture("sys/class/power_supply")).expect("fixture reads");
+    let supplies = read_power_supplies(&fixture("sys/class/power_supply")).expect("fixture reads");
     let by_name = |name: &str| {
         supplies
             .iter()

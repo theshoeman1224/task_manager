@@ -4,14 +4,10 @@ use crate::platform::linux::read_power_supplies;
 pub struct PowerMonitor;
 
 impl PowerMonitor {
+    // Monitors have no Default use site; construction goes through new().
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self
-    }
-}
-
-impl Default for PowerMonitor {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -41,17 +37,11 @@ impl MonitorSource for PowerMonitor {
             let prefix = format!("{} {}", supply.name, supply.kind);
             snapshot.metrics.push(Metric::new(
                 format!("{prefix} power"),
-                supply
-                    .power_watts
-                    .map(MetricValue::Watts)
-                    .unwrap_or(MetricValue::Unavailable),
+                MetricValue::watts(supply.power_watts),
             ));
             snapshot.metrics.push(Metric::new(
                 format!("{prefix} capacity"),
-                supply
-                    .capacity_percent
-                    .map(|value| MetricValue::Percent(value as f64))
-                    .unwrap_or(MetricValue::Unavailable),
+                MetricValue::percentage(supply.capacity_percent.map(|value| value as f64)),
             ));
             if let Some(power_watts) = supply.power_watts {
                 snapshot.graph_points.push((prefix, power_watts));

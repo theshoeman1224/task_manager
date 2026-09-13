@@ -18,13 +18,6 @@ pub struct NvidiaGpuInfo {
     pub temperature_celsius: Option<f64>,
 }
 
-// Unused free function kept for API stability; its removal is a documented
-// deliberate change (BASELINE.md), planned alongside Phase 2's GPU cleanup.
-pub fn read_nvidia_gpus() -> io::Result<Vec<NvidiaGpuInfo>> {
-    let nvml = NvmlLibrary::load()?;
-    nvml.query()
-}
-
 pub struct NvidiaGpuReader {
     nvml: NvmlLibrary,
 }

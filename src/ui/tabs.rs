@@ -8,7 +8,9 @@ use gtk4::prelude::*;
 use gtk4::{Box as GtkBox, DrawingArea, Label, Orientation, ScrolledWindow};
 
 use crate::core::{format_metric_value, Metric, MetricSeries, MetricSnapshot};
-use crate::ui::graph::{draw_graph, graph_max, graph_value, scale_text, GraphState, SharedGraphState};
+use crate::ui::graph::{
+    draw_graph, graph_max, graph_value, scale_text, GraphState, SharedGraphState,
+};
 
 pub(crate) const METRIC_ROW_HEIGHT: i32 = 118;
 
